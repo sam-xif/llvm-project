@@ -8,6 +8,10 @@
 // Mutate a test input.
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+
 #include "FuzzerDefs.h"
 #include "FuzzerExtFunctions.h"
 #include "FuzzerIO.h"
@@ -529,7 +533,60 @@ std::string MutationDispatcher::MutationSequence() {
 }
 
 size_t MutationDispatcher::Mutate(uint8_t *Data, size_t Size, size_t MaxSize) {
-  return MutateImpl(Data, Size, MaxSize, Mutators);
+
+/*  
+  std::cerr << "here!" << std::dec << sizeof(uint8_t) << "\n";
+  // Define the terminal
+  uint8_t sep[4] = { 0xf1, 0x53, 0x22, 0xc3 };
+  uint8_t *buf = 0;
+  size_t buf_size = 0;
+
+  std::cout << "defining terminal, first two bytes: " << std::hex << sep[0] << ',' << std::hex << sep[1] << '\n';
+
+  assert(sizeof(uint8_t) == 1);
+ 
+  // Idea: find the terminal in the Data, copy all data after the terminal into a new buffer, and adjust the Size appropriately
+  
+  // For now, just do a naive linear search
+  int sep_idx = -1; // -1 signifies sep not found; sep could be at index 0
+  if (Size >= 4) {
+      for (int Iter = 0; Iter < Size - 4; Iter++) {
+        if (
+                Data[Iter] == sep[0]
+                && Data[Iter + 1] == sep[1]
+                && Data[Iter + 2] == sep[2]
+                && Data[Iter + 3] == sep[3]
+        ) {
+          sep_idx = Iter;
+          break; // break out, since we assume there will be at most exactly one sep
+        }
+      }
+  }
+
+  if (sep_idx == -1) {
+    
+  } else {
+    std::cout << "found sep, memcpying...";
+
+    buf = (uint8_t *)malloc(Size - sep_idx);
+    buf_size = Size - sep_idx;
+    memcpy(buf, Data + sep_idx, buf_size);
+
+    Size -= buf_size;
+  }
+*/
+
+  size_t NewSize = MutateImpl(Data, Size, MaxSize, Mutators);
+/*
+  if (buf && sep_idx != -1) {
+
+    std::cout << "Returning, putting data back\n";
+    memcpy(Data + NewSize, buf, buf_size);
+    NewSize += buf_size;
+    free(buf);
+  }
+*/
+  return NewSize;
 }
 
 size_t MutationDispatcher::DefaultMutate(uint8_t *Data, size_t Size,
@@ -541,6 +598,8 @@ size_t MutationDispatcher::DefaultMutate(uint8_t *Data, size_t Size,
 size_t MutationDispatcher::MutateImpl(uint8_t *Data, size_t Size,
                                       size_t MaxSize,
                                       std::vector<Mutator> &Mutators) {
+
+
   assert(MaxSize > 0);
   // Some mutations may fail (e.g. can't insert more bytes if Size == MaxSize),
   // in which case they will return 0.
@@ -552,7 +611,7 @@ size_t MutationDispatcher::MutateImpl(uint8_t *Data, size_t Size,
       if (Options.OnlyASCII)
         ToASCII(Data, NewSize);
       CurrentMutatorSequence.push_back(M);
-      return NewSize;
+       return NewSize;
     }
   }
   *Data = ' ';
