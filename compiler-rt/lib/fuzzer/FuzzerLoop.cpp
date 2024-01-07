@@ -753,63 +753,7 @@ void Fuzzer::MutateAndTestOne() {
 
     // If MutateWithMask either failed or wasn't called, call default Mutate.
     if (!NewSize) {
-      // Strip out metadata and adjust CurrentMaxMutationLen accordingly
-  
-      std::cerr << "here!" << std::dec << sizeof(uint8_t) << "\n";
-      // Define the terminal
-      uint8_t sep[4] = { 0xf1, 0x53, 0x22, 0xc3 };
-      uint8_t *buf = 0;
-      size_t buf_size = 0;
-
-      std::cout << "defining terminal, first two bytes: " << std::hex << sep[0] << ',' << std::hex << sep[1] << '\n';
-
-      assert(sizeof(uint8_t) == 1);
-     
-      // Idea: find the terminal in the Data, copy all data after the terminal into a new buffer, and adjust the Size appropriately
-      
-      // For now, just do a naive linear search
-      int sep_idx = -1; // -1 signifies sep not found; sep could be at index 0
-      if (Size >= 4) {
-          for (int Iter = 0; Iter < Size - 4; Iter++) {
-            if (
-                    CurrentUnitData[Iter] == sep[0]
-                    && CurrentUnitData[Iter + 1] == sep[1]
-                    && CurrentUnitData[Iter + 2] == sep[2]
-                    && CurrentUnitData[Iter + 3] == sep[3]
-            ) {
-              sep_idx = Iter;
-              break; // break out, since we assume there will be at most exactly one sep
-            }
-          }
-      }
-
-      if (sep_idx == -1) {
-        
-      } else {
-        std::cout << "found sep, memcpying...";
-
-        buf = (uint8_t *)malloc(Size - sep_idx);
-        buf_size = Size - sep_idx;
-        memcpy(buf, CurrentUnitData + sep_idx, buf_size);
-
-        Size -= buf_size;
-
-        CurrentMaxMutationLen -= buf_size;
-      }
-
-
-
       NewSize = MD.Mutate(CurrentUnitData, Size, CurrentMaxMutationLen);
-      if (buf && sep_idx != -1) {
-
-        std::cout << "Returning, putting data back\n";
-        CurrentMaxMutationLen += buf_size;
-        memcpy(CurrentUnitData + NewSize, buf, buf_size);
-        NewSize += buf_size;
-        free(buf);
-      }
-
-
     }
     assert(NewSize > 0 && "Mutator returned empty unit");
     assert(NewSize <= CurrentMaxMutationLen && "Mutator return oversized unit");

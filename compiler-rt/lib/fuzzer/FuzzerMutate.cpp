@@ -73,12 +73,20 @@ static char RandCh(Random &Rand) {
 
 size_t MutationDispatcher::Mutate_Custom(uint8_t *Data, size_t Size,
                                          size_t MaxSize) {
+  // Replace metadata so custom mutator has access to it
+  int NewSize = this->ReplaceMetadata(Data, Size, MaxSize);
+  int NewMaxSize = MaxSize + (NewSize - Size);
+
   if (EF->__msan_unpoison)
-    EF->__msan_unpoison(Data, Size);
+    EF->__msan_unpoison(Data, NewSize);  // TODO: Should we ReplaceMetadata after this?
   if (EF->__msan_unpoison_param)
     EF->__msan_unpoison_param(4);
-  return EF->LLVMFuzzerCustomMutator(Data, Size, MaxSize,
+  // TODO: here, replace the metadata that was stripped out
+  return EF->LLVMFuzzerCustomMutator(Data, NewSize, NewMaxSize,
                                      Rand.Rand<unsigned int>());
+  
+  NewSize = this->StripMetadata(Data, NewSize);
+  return NewSize;
 }
 
 size_t MutationDispatcher::Mutate_CustomCrossOver(uint8_t *Data, size_t Size,
@@ -598,7 +606,8 @@ size_t MutationDispatcher::DefaultMutate(uint8_t *Data, size_t Size,
 size_t MutationDispatcher::MutateImpl(uint8_t *Data, size_t Size,
                                       size_t MaxSize,
                                       std::vector<Mutator> &Mutators) {
-
+  int NewSize = this->StripMetadata(Data, Size);
+  int NewMaxSize = MaxSize - (Size - NewSize);
 
   assert(MaxSize > 0);
   // Some mutations may fail (e.g. can't insert more bytes if Size == MaxSize),
@@ -606,15 +615,19 @@ size_t MutationDispatcher::MutateImpl(uint8_t *Data, size_t Size,
   // Try several times before returning un-mutated data.
   for (int Iter = 0; Iter < 100; Iter++) {
     auto M = Mutators[Rand(Mutators.size())];
-    size_t NewSize = (this->*(M.Fn))(Data, Size, MaxSize);
-    if (NewSize && NewSize <= MaxSize) {
+    size_t MutatedSize = (this->*(M.Fn))(Data, NewSize, NewMaxSize);
+    if (MutatedSize && MutatedSize <= NewMaxSize) {
       if (Options.OnlyASCII)
-        ToASCII(Data, NewSize);
+        ToASCII(Data, MutatedSize);
       CurrentMutatorSequence.push_back(M);
-       return NewSize;
+
+      NewSize = this->ReplaceMetadata(Data, MutatedSize, MaxSize);
+      return NewSize;
     }
   }
   *Data = ' ';
+
+  NewSize = this->ReplaceMetadata(Data, 1, MaxSize);
   return 1;   // Fallback, should not happen frequently.
 }
 
@@ -651,5 +664,56 @@ void MutationDispatcher::AddWordToManualDictionary(const Word &W) {
   ManualDictionary.push_back(
       {W, std::numeric_limits<size_t>::max()});
 }
+
+
+int MutationDispatcher::StripMetadata(uint8_t *Data, int Size) {
+  
+  int NewSize = Size;
+
+  // For now, just do a naive linear search
+  int sep_idx = -1; // -1 signifies sep not found; sep could be at index 0
+  if (Size >= 4) {
+    for (int Iter = 0; Iter < Size - 4; Iter++) {
+      if (
+            Data[Iter] == this->MetadataMarker[0]
+            && Data[Iter + 1] == this->MetadataMarker[1]
+            && Data[Iter + 2] == this->MetadataMarker[2]
+            && Data[Iter + 3] == this->MetadataMarker[3]
+      ) {
+        sep_idx = Iter;
+        break; // break out, since we assume there will be at most exactly one sep
+      }
+    }
+  }
+
+  if (sep_idx != -1) {
+    this->Metadata = (uint8_t *)malloc(Size - sep_idx);
+    size_t buf_size = Size - sep_idx;
+    memcpy(this->Metadata, Data + sep_idx, buf_size);
+    this->MetadataSize = buf_size;
+
+    Size -= buf_size;
+
+    NewSize -= buf_size;
+  }
+
+  return NewSize;
+}
+
+int MutationDispatcher::ReplaceMetadata(uint8_t *Data, int Size, int MaxSize) { 
+  int NewSize = Size;
+
+  if (this->Metadata) {
+    memcpy(Data + NewSize, this->Metadata, this->MetadataSize);
+    NewSize += this->MetadataSize;
+    free(this->Metadata);
+  }
+
+  this->Metadata = nullptr;
+  this->MetadataSize = 0;
+
+  return NewSize;
+}
+
 
 }  // namespace fuzzer

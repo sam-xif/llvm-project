@@ -95,6 +95,20 @@ public:
 
   Random &GetRand() { return Rand; }
 
+  /**
+   * Strips out metadata from the given data, and places it into this object for storage
+   * Returns the new size of the data buffer.
+   *
+   * MaxLen - (Size - NewSize) = New Max Mutation Length
+   */
+  int StripMetadata(uint8_t *Data, int Size);
+
+  /**
+   * Replaces metadata into the given data from this object's internal store. 
+   * Returns the new size of the data buffer
+   */
+  int ReplaceMetadata(uint8_t *Data, int Size, int MaxSize);
+
  private:
   struct Mutator {
     size_t (MutationDispatcher::*Fn)(uint8_t *Data, size_t Size, size_t Max);
@@ -149,6 +163,11 @@ public:
   std::vector<Mutator> Mutators;
   std::vector<Mutator> DefaultMutators;
   std::vector<Mutator> CurrentMutatorSequence;
+
+  uint8_t *Metadata = nullptr;  // Storage for metadata associated with the data that should not be tampered with
+  size_t MetadataSize = 0;
+  
+  uint8_t MetadataMarker[4] = { 0xf1, 0x53, 0x22, 0xc3 };
 };
 
 }  // namespace fuzzer
