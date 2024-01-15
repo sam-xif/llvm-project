@@ -44,7 +44,7 @@ MutationDispatcher::MutationDispatcher(Random &Rand,
           {&MutationDispatcher::Mutate_ChangeASCIIInteger, "ChangeASCIIInt"},
           {&MutationDispatcher::Mutate_ChangeBinaryInteger, "ChangeBinInt"},
           {&MutationDispatcher::Mutate_CopyPart, "CopyPart"},
-       //   {&MutationDispatcher::Mutate_CrossOver, "CrossOver"},
+          {&MutationDispatcher::Mutate_CrossOver, "CrossOver"},
           {&MutationDispatcher::Mutate_AddWordFromManualDictionary,
            "ManualDict"},
           {&MutationDispatcher::Mutate_AddWordFromPersistentAutoDictionary,
@@ -459,20 +459,21 @@ size_t MutationDispatcher::Mutate_CrossOver(uint8_t *Data, size_t Size,
   const Unit &O = *CrossOverWith;
   if (O.empty()) return 0;
   size_t NewSize = 0;
+  int CrossOverSizeWithoutMetadata = this->GetSizeWithoutMetadata(O.data(), O.size());
   switch(Rand(3)) {
     case 0:
       MutateInPlaceHere.resize(MaxSize);
-      NewSize = CrossOver(Data, Size, O.data(), O.size(),
+      NewSize = CrossOver(Data, Size, O.data(), CrossOverSizeWithoutMetadata,
                           MutateInPlaceHere.data(), MaxSize);
       memcpy(Data, MutateInPlaceHere.data(), NewSize);
       break;
     case 1:
-      NewSize = InsertPartOf(O.data(), O.size(), Data, Size, MaxSize);
+      NewSize = InsertPartOf(O.data(), CrossOverSizeWithoutMetadata, Data, Size, MaxSize);
       if (!NewSize)
-        NewSize = CopyPartOf(O.data(), O.size(), Data, Size);
+        NewSize = CopyPartOf(O.data(), CrossOverSizeWithoutMetadata, Data, Size);
       break;
     case 2:
-      NewSize = CopyPartOf(O.data(), O.size(), Data, Size);
+      NewSize = CopyPartOf(O.data(), CrossOverSizeWithoutMetadata, Data, Size);
       break;
     default: assert(0);
   }
@@ -669,38 +670,13 @@ void MutationDispatcher::AddWordToManualDictionary(const Word &W) {
 
 
 int MutationDispatcher::StripMetadata(uint8_t *Data, int Size) {
-
-     
-  int NewSize = Size;
-
-  // For now, just do a naive linear search
-  int sep_idx = -1; // -1 signifies sep not found; sep could be at index 0
-  if (Size >= 4) {
-    for (int Iter = 0; Iter < Size - 4; Iter++) {
-      if (
-            Data[Iter] == this->MetadataMarker[0]
-            && Data[Iter + 1] == this->MetadataMarker[1]
-            && Data[Iter + 2] == this->MetadataMarker[2]
-            && Data[Iter + 3] == this->MetadataMarker[3]
-      ) {
-        sep_idx = Iter;
-        break; // break out, since we assume there will be at most exactly one sep
-      }
-    }
+  int NewSize = this->GetSizeWithoutMetadata(Data, Size);
+  int buf_size = Size - NewSize;
+  if (buf_size > 0) {
+      this->Metadata = (uint8_t *)malloc(buf_size);
+      memcpy(this->Metadata, Data + NewSize, buf_size);
   }
-
-  if (sep_idx != -1) {
-    size_t buf_size = Size - sep_idx;
-    this->Metadata = (uint8_t *)malloc(buf_size);
-    memcpy(this->Metadata, Data + sep_idx, buf_size);
-    this->MetadataSize = buf_size;
-
-    NewSize -= buf_size;
-  }
-
-
-  //std::cout << "IN STRIPMETADATA: sizein: " << std::dec << Size << " sizeout: " << std::dec << NewSize << " metadatasize: " << std::dec << this->MetadataSize << std::endl;
-  
+  this->MetadataSize = buf_size;
   return NewSize;
 }
 
@@ -723,6 +699,32 @@ int MutationDispatcher::ReplaceMetadata(uint8_t *Data, int Size, int MaxSize) {
 
 
   return NewSize;
+}
+
+int MutationDispatcher::GetSizeWithoutMetadata(const uint8_t *Data, int Size) {
+
+  // For now, just do a naive linear search
+  int sep_idx = -1; // -1 signifies sep not found; sep could be at index 0
+  if (Size >= 4) {
+    for (int Iter = 0; Iter < Size - 4; Iter++) {
+      if (
+            Data[Iter] == this->MetadataMarker[0]
+            && Data[Iter + 1] == this->MetadataMarker[1]
+            && Data[Iter + 2] == this->MetadataMarker[2]
+            && Data[Iter + 3] == this->MetadataMarker[3]
+      ) {
+        sep_idx = Iter;
+        break; // break out, since we assume there will be at most exactly one sep
+      }
+    }
+  }
+
+  if (sep_idx != -1) {
+      return Size - (Size - sep_idx);
+  } else {
+      return Size;
+  }
+
 }
 
 

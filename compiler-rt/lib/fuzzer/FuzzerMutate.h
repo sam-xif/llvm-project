@@ -109,6 +109,12 @@ public:
    */
   int ReplaceMetadata(uint8_t *Data, int Size, int MaxSize);
 
+  /**
+   * Gets the size of the given data stream without the metadata, if there is any.
+   * Does not update internal state of the mutation dispatcher.
+   */
+  int GetSizeWithoutMetadata(const uint8_t *Data, int Size);
+
  private:
   struct Mutator {
     size_t (MutationDispatcher::*Fn)(uint8_t *Data, size_t Size, size_t Max);
