@@ -631,7 +631,7 @@ size_t MutationDispatcher::MutateImpl(uint8_t *Data, size_t Size,
   *Data = ' ';
   std::cout << "Hit fallback!" << std::endl;
   NewSize = this->ReplaceMetadata(Data, 1, MaxSize);
-  return 1;   // Fallback, should not happen frequently.
+  return NewSize;   // Fallback, should not happen frequently.
 }
 
 // Mask represents the set of Data bytes that are worth mutating.
