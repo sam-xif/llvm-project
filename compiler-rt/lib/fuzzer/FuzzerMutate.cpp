@@ -44,7 +44,7 @@ MutationDispatcher::MutationDispatcher(Random &Rand,
           {&MutationDispatcher::Mutate_ChangeASCIIInteger, "ChangeASCIIInt"},
           {&MutationDispatcher::Mutate_ChangeBinaryInteger, "ChangeBinInt"},
           {&MutationDispatcher::Mutate_CopyPart, "CopyPart"},
-          {&MutationDispatcher::Mutate_CrossOver, "CrossOver"},
+       //   {&MutationDispatcher::Mutate_CrossOver, "CrossOver"},
           {&MutationDispatcher::Mutate_AddWordFromManualDictionary,
            "ManualDict"},
           {&MutationDispatcher::Mutate_AddWordFromPersistentAutoDictionary,
@@ -74,15 +74,17 @@ static char RandCh(Random &Rand) {
 size_t MutationDispatcher::Mutate_Custom(uint8_t *Data, size_t Size,
                                          size_t MaxSize) {
   // Replace metadata so custom mutator has access to it
+  if (EF->__msan_unpoison)
+    EF->__msan_unpoison(Data, Size);  // TODO: Should we ReplaceMetadata after this?
+  if (EF->__msan_unpoison_param)
+    EF->__msan_unpoison_param(4);
+
   int NewSize = this->ReplaceMetadata(Data, Size, MaxSize);
   int NewMaxSize = MaxSize + (NewSize - Size);
 
-  if (EF->__msan_unpoison)
-    EF->__msan_unpoison(Data, NewSize);  // TODO: Should we ReplaceMetadata after this?
-  if (EF->__msan_unpoison_param)
-    EF->__msan_unpoison_param(4);
+
   // TODO: here, replace the metadata that was stripped out
-  return EF->LLVMFuzzerCustomMutator(Data, NewSize, NewMaxSize,
+  NewSize = EF->LLVMFuzzerCustomMutator(Data, NewSize, NewMaxSize,
                                      Rand.Rand<unsigned int>());
   
   NewSize = this->StripMetadata(Data, NewSize);
@@ -626,7 +628,7 @@ size_t MutationDispatcher::MutateImpl(uint8_t *Data, size_t Size,
     }
   }
   *Data = ' ';
-
+  std::cout << "Hit fallback!" << std::endl;
   NewSize = this->ReplaceMetadata(Data, 1, MaxSize);
   return 1;   // Fallback, should not happen frequently.
 }
@@ -667,7 +669,8 @@ void MutationDispatcher::AddWordToManualDictionary(const Word &W) {
 
 
 int MutationDispatcher::StripMetadata(uint8_t *Data, int Size) {
-  
+
+     
   int NewSize = Size;
 
   // For now, just do a naive linear search
@@ -687,20 +690,23 @@ int MutationDispatcher::StripMetadata(uint8_t *Data, int Size) {
   }
 
   if (sep_idx != -1) {
-    this->Metadata = (uint8_t *)malloc(Size - sep_idx);
     size_t buf_size = Size - sep_idx;
+    this->Metadata = (uint8_t *)malloc(buf_size);
     memcpy(this->Metadata, Data + sep_idx, buf_size);
     this->MetadataSize = buf_size;
-
-    Size -= buf_size;
 
     NewSize -= buf_size;
   }
 
+
+  //std::cout << "IN STRIPMETADATA: sizein: " << std::dec << Size << " sizeout: " << std::dec << NewSize << " metadatasize: " << std::dec << this->MetadataSize << std::endl;
+  
   return NewSize;
 }
 
 int MutationDispatcher::ReplaceMetadata(uint8_t *Data, int Size, int MaxSize) { 
+
+  
   int NewSize = Size;
 
   if (this->Metadata) {
@@ -711,6 +717,10 @@ int MutationDispatcher::ReplaceMetadata(uint8_t *Data, int Size, int MaxSize) {
 
   this->Metadata = nullptr;
   this->MetadataSize = 0;
+
+
+  //std::cout << "IN REPLACEMETADATA: sizein: " << std::dec << Size << " sizeout: " << std::dec << NewSize << std::endl;
+
 
   return NewSize;
 }
