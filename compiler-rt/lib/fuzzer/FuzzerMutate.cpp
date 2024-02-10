@@ -347,6 +347,7 @@ size_t MutationDispatcher::InsertPartOf(const uint8_t *From, size_t FromSize,
                                         uint8_t *To, size_t ToSize,
                                         size_t MaxToSize) {
   if (ToSize >= MaxToSize) return 0;
+  if (FromSize == 0) return 0;
   size_t AvailableSpace = MaxToSize - ToSize;
   size_t MaxCopySize = std::min(AvailableSpace, FromSize);
   size_t CopySize = Rand(MaxCopySize) + 1;
